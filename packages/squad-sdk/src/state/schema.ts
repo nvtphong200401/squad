@@ -28,6 +28,7 @@ export const COLLECTION_PATHS: Record<CollectionName, CollectionPathResolver> = 
   templates: (id: string) => `.squad/templates/${id}`,
   log: '.squad/log',
   config: '.squad/config.json',
+  tasks: (id: string) => `.squad/tasks/${id}`,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────

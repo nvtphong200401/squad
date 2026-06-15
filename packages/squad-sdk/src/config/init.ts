@@ -844,6 +844,7 @@ export async function initSquad(options: InitOptions, storage: StorageProvider =
     join(squadDir, 'identity'),
     join(squadDir, 'orchestration-log'),
     join(squadDir, 'log'),
+    join(squadDir, 'tasks'),
     join(squadDir, 'rai'),
     join(squadDir, '.scratch'),
   ];
@@ -1356,6 +1357,7 @@ ${projectDescription ? `- **Description:** ${projectDescription}\n` : ''}- **Cre
     '.squad/agents/*/history.md merge=union',
     '.squad/log/** merge=union',
     '.squad/orchestration-log/** merge=union',
+    '.squad/tasks/** merge=union',
     '.squad/rai/audit-trail.md merge=union',
     '.squad/fact-checker/audit-trail.md merge=union',
   ];
@@ -1388,6 +1390,7 @@ ${projectDescription ? `- **Description:** ${projectDescription}\n` : ''}- **Cre
   const ignoreEntries = [
     '.squad/orchestration-log/',
     '.squad/log/',
+    '.squad/tasks/',
     '.squad/decisions/inbox/',
     '.squad/sessions/',
     '.squad/.scratch/',

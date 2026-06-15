@@ -135,16 +135,23 @@ export {
   LogCollection,
   RoutingCollection,
   SkillsCollection,
+  TasksCollection,
   TeamCollection,
   TemplatesCollection,
   // Top-level facade
   SquadState,
 } from './state/index.js';
-export type { ConfigFileData } from './state/index.js';
+export type { ConfigFileData, CreateTaskInput } from './state/index.js';
 export type {
   Agent,
   Decision,
   LogEntry,
+  TaskEvent,
+  TaskEventType,
+  TaskLinks,
+  TaskRecord,
+  TaskSource,
+  TaskStatus,
   RoutingConfigRule,
   SquadStateConfig,
   StateErrorKind,

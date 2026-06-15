@@ -15,6 +15,12 @@ export type {
   ModelTier,
   RoutingConfig,
   RoutingConfigRule,
+  TaskEvent,
+  TaskEventType,
+  TaskLinks,
+  TaskRecord,
+  TaskSource,
+  TaskStatus,
   RoutingRule,
   SkillDefinition,
   SquadStateConfig,
@@ -58,11 +64,12 @@ export {
   LogCollection,
   RoutingCollection,
   SkillsCollection,
+  TasksCollection,
   TeamCollection,
   TemplatesCollection,
 } from './collections.js';
 
-export type { ConfigFileData } from './collections.js';
+export type { ConfigFileData, CreateTaskInput } from './collections.js';
 
 // SquadState facade
 export { SquadState } from './squad-state.js';

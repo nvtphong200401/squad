@@ -100,6 +100,62 @@ export interface SquadStateConfig {
   readonly cacheTtlMs?: number;
 }
 
+/** Source category for a tracked task/work item. */
+export type TaskSource = 'issue' | 'manual' | 'pr' | 'external';
+
+/** Task runtime status (projected from task events). */
+export type TaskStatus = 'selected' | 'running' | 'succeeded' | 'failed' | 'blocked' | 'cancelled';
+
+/** Structured event types in the task execution ledger. */
+export type TaskEventType =
+  | 'selected'
+  | 'started'
+  | 'heartbeat'
+  | 'completed'
+  | 'failed'
+  | 'blocked'
+  | 'cancelled';
+
+/** Link/reference metadata for external logs and execution context. */
+export interface TaskLinks {
+  readonly orchestrationLog?: string;
+  readonly sessionLog?: string;
+  readonly rawOutput?: string;
+}
+
+/** Canonical task record projected from task metadata + append-only events. */
+export interface TaskRecord {
+  readonly id: string;
+  readonly schemaVersion: number;
+  readonly source: TaskSource;
+  readonly sourceRef: string;
+  readonly title: string;
+  readonly status: TaskStatus;
+  readonly assignedAgent: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly latestAttemptId: string;
+  readonly attemptCount: number;
+  readonly branchName?: string;
+  readonly prNumber?: number;
+  readonly links?: TaskLinks;
+  readonly dependencies?: readonly string[];
+}
+
+/** Single append-only task event persisted at `.squad/tasks/<id>/events/*.json`. */
+export interface TaskEvent {
+  readonly schemaVersion: number;
+  readonly id: string;
+  readonly type: TaskEventType;
+  readonly attemptId: string;
+  readonly timestamp: string;
+  readonly summary?: string;
+  readonly assignedAgent?: string;
+  readonly branchName?: string;
+  readonly prNumber?: number;
+  readonly links?: TaskLinks;
+}
+
 /**
  * Discriminant for state-layer storage errors.
  * Distinct from the low-level `StorageError` in `storage/storage-error.ts`

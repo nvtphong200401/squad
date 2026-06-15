@@ -630,6 +630,7 @@ describe('ToolRegistry state tools with git-native backend', () => {
     const health = registry.getTool('squad_state_health')!;
 
     await expect(write.handler({ key: 'decisions.md', content: '# Decisions\n' })).resolves.toMatchObject({ resultType: 'success' });
+    await expect(write.handler({ key: 'tasks/issue-123/meta.json', content: '{"id":"issue-123"}\n' })).resolves.toMatchObject({ resultType: 'success' });
     await expect(write.handler({ key: 'sessions/session-1/state.md', content: 'ok\n' })).resolves.toMatchObject({ resultType: 'success' });
     await expect(write.handler({ key: '.scratch/notes.md', content: 'ok\n' })).resolves.toMatchObject({ resultType: 'success' });
     await expect(append.handler({ key: 'agents/data/history.md', content: 'Learned via state tools.\n' })).resolves.toMatchObject({ resultType: 'success' });
@@ -637,6 +638,7 @@ describe('ToolRegistry state tools with git-native backend', () => {
     await expect(health.handler({})).resolves.toMatchObject({ resultType: 'success' });
 
     expect(backend.read('decisions.md')).toBe('# Decisions\n');
+    expect(backend.read('tasks/issue-123/meta.json')).toContain('issue-123');
     expect(backend.read('.scratch/notes.md')).toBe('ok\n');
     expect(backend.read('agents/data/history.md')).toBe('Learned via state tools.\n');
     expect(backend.read('sessions/session-1/state.md')).toBeUndefined();

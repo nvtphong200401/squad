@@ -19,6 +19,10 @@ const {
   mockExecFileSync,
   mockFsExistsSync,
   mockRmSync,
+  mockTasksCreate,
+  mockTasksGet,
+  mockTasksAppendEvent,
+  mockSquadStateFromStorage,
 } = vi.hoisted(() => ({
   mockStorage: {
     existsSync: vi.fn(() => true),
@@ -34,12 +38,19 @@ const {
   mockExecFileSync: vi.fn((): string => ''),
   mockFsExistsSync: vi.fn((): boolean => false),
   mockRmSync: vi.fn(),
+  mockTasksCreate: vi.fn(async () => undefined),
+  mockTasksGet: vi.fn(async () => undefined),
+  mockTasksAppendEvent: vi.fn(async () => undefined),
+  mockSquadStateFromStorage: vi.fn(),
 }));
 
 // ── Module mocks ────────────────────────────────────────────────────
 
 vi.mock('@bradygaster/squad-sdk', () => ({
   FSStorageProvider: vi.fn(() => mockStorage),
+  SquadState: {
+    fromStorage: mockSquadStateFromStorage,
+  },
 }));
 
 vi.mock('node:child_process', () => ({
@@ -101,6 +112,18 @@ describe('Watch Capabilities', () => {
     mockStorage.listSync.mockReturnValue([]);
     mockFsExistsSync.mockReturnValue(false);
     mockRmSync.mockReturnValue(undefined);
+    mockTasksCreate.mockReset();
+    mockTasksGet.mockReset();
+    mockTasksAppendEvent.mockReset();
+    mockTasksGet.mockResolvedValue(undefined);
+    mockSquadStateFromStorage.mockReset();
+    mockSquadStateFromStorage.mockReturnValue({
+      tasks: {
+        create: mockTasksCreate,
+        get: mockTasksGet,
+        appendEvent: mockTasksAppendEvent,
+      },
+    });
     mockExecFile.mockImplementation((...args: unknown[]) => {
       const cb = findCallback(args);
       if (cb) cb(null, '', '');
@@ -303,6 +326,37 @@ describe('Watch Capabilities', () => {
         expect(result.success).toBe(true);
         expect(result.summary).toContain('agent dispatched');
         expect(result.data?.dispatched).toBe(1);
+      });
+
+      it('writes task ledger selected/started/completed events when state context is provided', async () => {
+        const cap = new ExecuteCapability();
+        const ctx = makeContext({
+          stateContext: { storage: {} } as unknown as WatchContext['stateContext'],
+          adapter: mockAdapter([{ id: 7, title: 'Fix bug', tags: ['squad:eecom'] }]),
+        });
+        const result = await cap.execute(ctx);
+        expect(result.success).toBe(true);
+        expect(mockTasksCreate).toHaveBeenCalledTimes(1);
+        expect(mockTasksAppendEvent).toHaveBeenCalledTimes(3);
+        const eventTypes = mockTasksAppendEvent.mock.calls.map(([, event]) => event.type);
+        expect(eventTypes).toEqual(['selected', 'started', 'completed']);
+      });
+
+      it('writes blocked terminal event on timeout failures', async () => {
+        mockExecFile.mockImplementation((...args: unknown[]) => {
+          const cb = findCallback(args);
+          if (cb) cb(Object.assign(new Error('killed'), { killed: true }));
+          return {};
+        });
+        const cap = new ExecuteCapability();
+        const ctx = makeContext({
+          stateContext: { storage: {} } as unknown as WatchContext['stateContext'],
+          adapter: mockAdapter([{ id: 9, title: 'Fix bug', tags: ['squad:eecom'] }]),
+        });
+        const result = await cap.execute(ctx);
+        expect(result.success).toBe(false);
+        const eventTypes = mockTasksAppendEvent.mock.calls.map(([, event]) => event.type);
+        expect(eventTypes).toEqual(['selected', 'started', 'blocked']);
       });
 
       it('handles adapter errors gracefully', async () => {

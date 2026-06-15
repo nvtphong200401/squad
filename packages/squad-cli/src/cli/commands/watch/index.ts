@@ -812,6 +812,7 @@ export async function runWatch(dest: string, options: WatchOptions | WatchConfig
     copilotFlags: config.copilotFlags,
     verbose: config.verbose,
     pidTracker,
+    stateContext: config.stateContext,
   };
 
   const enabledCapabilities = await preflightCapabilities(registry, config, baseContext);

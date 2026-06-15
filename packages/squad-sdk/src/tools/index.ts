@@ -263,11 +263,12 @@ function validateMutableStateToolKey(key: string): void {
     key.startsWith('log/') ||
     key.startsWith('orchestration-log/') ||
     key.startsWith('sessions/') ||
-    key.startsWith('.scratch/');
+    key.startsWith('.scratch/') ||
+    key.startsWith('tasks/');
 
   if (!isMutable) {
     throw new Error(
-      'State mutations are limited to mutable runtime state (decisions, inbox, logs, sessions, scratch files, and agent history). Static config such as config.json, team.md, routing.md, charters, templates, and skills must not be changed with state tools.',
+      'State mutations are limited to mutable runtime state (decisions, inbox, logs, sessions, scratch files, tasks ledger files, and agent history). Static config such as config.json, team.md, routing.md, charters, templates, and skills must not be changed with state tools.',
     );
   }
 }

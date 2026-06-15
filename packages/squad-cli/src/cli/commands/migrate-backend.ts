@@ -10,7 +10,8 @@
  *
  * In addition to flipping the `stateBackend` key in `.squad/config.json`, this
  * function MIGRATES pre-existing working-tree state (`decisions.md`,
- * `agents/<name>/history.md`) onto the squad-state orphan branch when moving
+ * `agents/<name>/history.md`, `.squad/tasks/**`) onto the squad-state orphan
+ * branch when moving
  * from a working-tree backend to an orphan-storage backend, so post-upgrade
  * agents can read pre-upgrade content (UPGRADE-NO-MIGRATION fix).
  */
@@ -92,6 +93,28 @@ function collectWorktreeState(dest: string): Array<{ relPath: string; content: s
         collected.push({
           relPath: path.posix.join('agents', agentName, 'history.md'),
           content: fs.readFileSync(histPath, 'utf-8'),
+        });
+      }
+    }
+  }
+
+  // tasks/** (task ledger runtime state)
+  const tasksDir = path.join(squadDir, 'tasks');
+  if (fs.existsSync(tasksDir) && fs.statSync(tasksDir).isDirectory()) {
+    const stack = [tasksDir];
+    while (stack.length > 0) {
+      const dir = stack.pop()!;
+      for (const entry of fs.readdirSync(dir)) {
+        const abs = path.join(dir, entry);
+        const stat = fs.statSync(abs);
+        if (stat.isDirectory()) {
+          stack.push(abs);
+          continue;
+        }
+        const rel = path.relative(tasksDir, abs).split(path.sep).join(path.posix.sep);
+        collected.push({
+          relPath: path.posix.join('tasks', rel),
+          content: fs.readFileSync(abs, 'utf-8'),
         });
       }
     }
@@ -293,13 +316,13 @@ export async function migrateStateBackend(dest: string, target: string): Promise
     // Transitioning FROM a worktree backend TO orphan/two-layer — add block
     const added = addSquadStateGitignoreBlock(gitignorePath, storage);
     if (added) {
-      console.log(`  ${GREEN}✓${RESET} added 2 entries to .gitignore (.squad/decisions.md, .squad/agents/*/history.md) — these now live on squad-state branch`);
+      console.log(`  ${GREEN}✓${RESET} added squad-state block to .gitignore (decisions, agent histories, tasks) — these now live on squad-state branch`);
     }
   } else if (WORKTREE_BACKENDS.has(target) && ORPHAN_BACKENDS.has(current)) {
     // Transitioning FROM orphan/two-layer BACK TO a local backend — remove block
     const removed = removeSquadStateGitignoreBlock(gitignorePath, storage);
     if (removed) {
-      console.log(`  ${GREEN}✓${RESET} removed 2 entries from .gitignore — .squad/decisions.md and agent histories are now committable again`);
+      console.log(`  ${GREEN}✓${RESET} removed squad-state block from .gitignore — decisions, agent histories, and tasks are now committable again`);
     }
   }
 
@@ -308,8 +331,9 @@ export async function migrateStateBackend(dest: string, target: string): Promise
 
 /**
  * INSIDER3-INIT-LEAK fix: when `squad init --state-backend orphan|two-layer`
- * runs, the SDK still hand-writes mutable state files (decisions.md and each
- * agent's history.md) into the working tree because it has no knowledge of the
+ * runs, the SDK still hand-writes mutable state files (decisions.md, each
+ * agent's history.md, and task ledger files under tasks/) into the working tree
+ * because it has no knowledge of the
  * future backend choice. This helper, invoked by the CLI immediately after the
  * orphan branch is created, lifts those mutable files onto the squad-state
  * orphan branch and removes them from the working tree so post-init agents
@@ -317,7 +341,7 @@ export async function migrateStateBackend(dest: string, target: string): Promise
  *
  * Source-of-truth hierarchy preserved: static files (team.md, charters,
  * ceremonies.md, casting/*, templates/*) are NEVER touched — only mutable
- * state (decisions.md, agents/<n>/history.md) migrates.
+ * state (decisions.md, agents/<n>/history.md, tasks/**) migrates.
  *
  * Returns the relative paths of files that were migrated + removed.
  */

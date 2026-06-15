@@ -1,8 +1,9 @@
 /**
  * Helpers for managing the squad-state .gitignore marker block.
  *
- * When the state backend is 'two-layer' or 'orphan', .squad/decisions.md
- * and .squad/agents/history.md are owned by the squad-state orphan branch.
+ * When the state backend is 'two-layer' or 'orphan', .squad/decisions.md,
+ * .squad/agents/history.md, and .squad/tasks/ are owned by the squad-state
+ * orphan branch.
  * Adding them to .gitignore prevents accidental staging via git add .,
  * git add -A, IDE "stage all", or git commit -am -- defense-in-depth
  * complement to the pre-commit hook installed by squad upgrade --state-backend.
@@ -22,6 +23,7 @@ const SQUAD_STATE_GITIGNORE_BLOCK =
   SQUAD_STATE_GITIGNORE_OPEN_MARKER + '\n' +
   '.squad/decisions.md\n' +
   '.squad/agents/*/history.md\n' +
+  '.squad/tasks/\n' +
   SQUAD_STATE_GITIGNORE_CLOSE_MARKER + '\n';
 
 /**
