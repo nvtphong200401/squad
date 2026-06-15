@@ -331,7 +331,7 @@ describe('Watch Capabilities', () => {
       it('writes task ledger selected/started/completed events when state context is provided', async () => {
         const cap = new ExecuteCapability();
         const ctx = makeContext({
-          stateContext: { storage: {} } as any,
+          stateContext: { storage: {} } as unknown as WatchContext['stateContext'],
           adapter: mockAdapter([{ id: 7, title: 'Fix bug', tags: ['squad:eecom'] }]),
         });
         const result = await cap.execute(ctx);
@@ -350,7 +350,7 @@ describe('Watch Capabilities', () => {
         });
         const cap = new ExecuteCapability();
         const ctx = makeContext({
-          stateContext: { storage: {} } as any,
+          stateContext: { storage: {} } as unknown as WatchContext['stateContext'],
           adapter: mockAdapter([{ id: 9, title: 'Fix bug', tags: ['squad:eecom'] }]),
         });
         const result = await cap.execute(ctx);

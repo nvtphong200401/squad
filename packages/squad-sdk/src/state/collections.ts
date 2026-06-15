@@ -466,21 +466,8 @@ export class TasksCollection {
     }
 
     let current = await this.get(taskId);
-    if (!current && normalizedEvent.type !== 'selected') {
-      throw new Error(`Task "${taskId}" must be selected before "${normalizedEvent.type}"`);
-    }
-
-    if (!current && normalizedEvent.type === 'selected') {
-      await this.create({
-        id: taskId,
-        source: 'external',
-        sourceRef: taskId,
-        title: taskId,
-        assignedAgent: normalizedEvent.assignedAgent ?? 'ralph',
-        createdAt: normalizedEvent.timestamp,
-        links: normalizedEvent.links,
-      });
-      current = await this.get(taskId);
+    if (!current) {
+      throw new Error(`Task "${taskId}" must be created before appending events`);
     }
 
     const nextStatus = statusForEventType(normalizedEvent.type);

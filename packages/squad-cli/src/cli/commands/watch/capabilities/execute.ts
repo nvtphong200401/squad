@@ -48,6 +48,15 @@ interface LedgerRuntime {
   timestamp: string;
 }
 
+function resolveLedgerRuntime(context: WatchContext, timestamp: string): LedgerRuntime | undefined {
+  if (!context.stateContext) return undefined;
+  const rawState = SquadState.fromStorage(context.stateContext.storage, context.teamRoot) as unknown as {
+    tasks?: LedgerRuntime['state']['tasks'];
+  };
+  if (!rawState.tasks) return undefined;
+  return { state: { tasks: rawState.tasks }, timestamp };
+}
+
 function toTaskId(issueNumber: number): string {
   return `issue-${issueNumber}`;
 }
@@ -224,7 +233,7 @@ async function executeAll(
   issues: ExecutableWorkItem[],
   context: WatchContext,
   timeoutMs: number,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; timedOut?: boolean }> {
   const prompt = buildAgentPrompt(issues, context.teamRoot);
 
   // Load Ralph's charter to give the spawned session full specialist context.
@@ -239,7 +248,7 @@ async function executeAll(
   const fullPrompt = charterPrefix + prompt;
   const { cmd, args } = buildAgentCommand(fullPrompt, context);
 
-  return new Promise<{ success: boolean; error?: string }>((resolve) => {
+  return new Promise<{ success: boolean; error?: string; timedOut?: boolean }>((resolve) => {
     const cp: ChildProcess = execFile(
       cmd,
       args,
@@ -248,7 +257,7 @@ async function executeAll(
         if (err) {
           const execErr = err as Error & { killed?: boolean };
           const msg = execErr.killed ? `Timed out` : execErr.message;
-          resolve({ success: false, error: msg });
+          resolve({ success: false, error: msg, timedOut: !!execErr.killed });
         } else {
           resolve({ success: true });
         }
@@ -288,9 +297,7 @@ export class ExecuteCapability implements WatchCapability {
     const vlog = createVerboseLogger(context.verbose ?? false);
     const timestamp = new Date().toISOString();
     const attemptId = `attempt-${timestamp.replaceAll(':', '-').replaceAll('.', '-')}`;
-    const ledgerRuntime: LedgerRuntime | undefined = context.stateContext
-      ? { state: SquadState.fromStorage(context.stateContext.storage, context.teamRoot) as unknown as LedgerRuntime['state'], timestamp }
-      : undefined;
+    const ledgerRuntime = resolveLedgerRuntime(context, timestamp);
 
     try {
       const timeout = ((context.config['timeout'] as number) ?? 30) * 60_000;
@@ -345,9 +352,7 @@ export class ExecuteCapability implements WatchCapability {
       const result = await executeAll(eligible, context, timeout);
 
       if (ledgerRuntime) {
-        const terminalType = result.success
-          ? 'completed'
-          : (result.error?.toLowerCase().includes('timed out') ? 'blocked' : 'failed');
+        const terminalType = result.success ? 'completed' : (result.timedOut ? 'blocked' : 'failed');
         for (const issue of eligible) {
           try {
             await writeLedgerEvent(ledgerRuntime, issue, {
