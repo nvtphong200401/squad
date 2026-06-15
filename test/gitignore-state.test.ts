@@ -31,6 +31,7 @@ describe('addSquadStateGitignoreBlock', () => {
     expect(content).toContain(SQUAD_STATE_GITIGNORE_OPEN_MARKER);
     expect(content).toContain('.squad/decisions.md');
     expect(content).toContain('.squad/agents/*/history.md');
+    expect(content).toContain('.squad/tasks/');
     expect(content).toContain(SQUAD_STATE_GITIGNORE_CLOSE_MARKER);
   });
 
@@ -44,6 +45,7 @@ describe('addSquadStateGitignoreBlock', () => {
     expect(content).toContain(SQUAD_STATE_GITIGNORE_OPEN_MARKER);
     expect(content).toContain('.squad/decisions.md');
     expect(content).toContain('.squad/agents/*/history.md');
+    expect(content).toContain('.squad/tasks/');
     expect(content).toContain(SQUAD_STATE_GITIGNORE_CLOSE_MARKER);
   });
 
@@ -103,6 +105,7 @@ describe('removeSquadStateGitignoreBlock', () => {
     expect(content).not.toContain(SQUAD_STATE_GITIGNORE_OPEN_MARKER);
     expect(content).not.toContain('.squad/decisions.md');
     expect(content).not.toContain('.squad/agents/*/history.md');
+    expect(content).not.toContain('.squad/tasks/');
     expect(content).not.toContain(SQUAD_STATE_GITIGNORE_CLOSE_MARKER);
   });
 
@@ -130,6 +133,7 @@ describe('removeSquadStateGitignoreBlock', () => {
       SQUAD_STATE_GITIGNORE_OPEN_MARKER,
       '.squad/decisions.md',
       '.squad/agents/*/history.md',
+      '.squad/tasks/',
       SQUAD_STATE_GITIGNORE_CLOSE_MARKER,
       '# custom entry after block',
       'build/',

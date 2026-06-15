@@ -27,6 +27,13 @@ import {
   parseTeam,
   serializeTeam,
 } from '../../packages/squad-sdk/src/state/io/team-io.js';
+import {
+  parseTaskEvent,
+  parseTaskMeta,
+  projectTaskRecord,
+  serializeTaskEvent,
+  serializeTaskMeta,
+} from '../../packages/squad-sdk/src/state/io/tasks-io.js';
 import { createAgentHandle } from '../../packages/squad-sdk/src/state/handles.js';
 import { parseHistory } from '../../packages/squad-sdk/src/state/io/history-io.js';
 import { InMemoryStorageProvider } from '../../packages/squad-sdk/src/storage/in-memory-storage-provider.js';
@@ -181,6 +188,7 @@ describe('resolveCollectionPath', () => {
     expect(resolveCollectionPath('agents', 'eecom')).toBe('.squad/agents/eecom');
     expect(resolveCollectionPath('skills', 'typescript-testing')).toBe('.squad/skills/typescript-testing');
     expect(resolveCollectionPath('templates', 'charter.md')).toBe('.squad/templates/charter.md');
+    expect(resolveCollectionPath('tasks', 'issue-123')).toBe('.squad/tasks/issue-123');
   });
 
   it('throws when function path called without id', () => {
@@ -189,6 +197,9 @@ describe('resolveCollectionPath', () => {
     );
     expect(() => resolveCollectionPath('skills')).toThrow(
       'Collection "skills" requires an entity id to resolve its path',
+    );
+    expect(() => resolveCollectionPath('tasks')).toThrow(
+      'Collection "tasks" requires an entity id to resolve its path',
     );
   });
 
@@ -767,6 +778,52 @@ describe('parseHistory adversarial markdown', () => {
     // Custom Section parsed but not mapped to any known field
     expect(result.context).toBeUndefined();
     expect(result.decisions).toBeUndefined();
+  });
+});
+
+describe('tasks-io', () => {
+  it('round-trips task metadata with optional fields omitted', () => {
+    const serialized = serializeTaskMeta({
+      id: 'issue-123',
+      schemaVersion: 1,
+      source: 'issue',
+      sourceRef: '#123',
+      title: 'Implement ledger',
+      assignedAgent: 'ralph',
+      createdAt: '2026-07-25T00:00:00.000Z',
+    });
+    const parsed = parseTaskMeta(serialized);
+    expect(parsed.id).toBe('issue-123');
+    expect(parsed.schemaVersion).toBe(1);
+  });
+
+  it('parses schema version defaults and projects status from events', () => {
+    const meta = parseTaskMeta(JSON.stringify({
+      id: 'issue-123',
+      source: 'issue',
+      sourceRef: '#123',
+      title: 'Implement ledger',
+      assignedAgent: 'ralph',
+      createdAt: '2026-07-25T00:00:00.000Z',
+    }));
+    const selected = parseTaskEvent(serializeTaskEvent({
+      id: 'selected-1',
+      schemaVersion: 1,
+      type: 'selected',
+      attemptId: 'attempt-1',
+      timestamp: '2026-07-25T00:00:01.000Z',
+    }));
+    const completed = parseTaskEvent(serializeTaskEvent({
+      id: 'completed-1',
+      schemaVersion: 1,
+      type: 'completed',
+      attemptId: 'attempt-1',
+      timestamp: '2026-07-25T00:00:02.000Z',
+    }));
+    const projected = projectTaskRecord(meta, [selected, completed]);
+    expect(projected.status).toBe('succeeded');
+    expect(projected.attemptCount).toBe(1);
+    expect(projected.latestAttemptId).toBe('attempt-1');
   });
 });
 

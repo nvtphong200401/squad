@@ -448,11 +448,13 @@ const GITATTRIBUTES_RULES = [
   '.squad/agents/*/history.md merge=union',
   '.squad/log/** merge=union',
   '.squad/orchestration-log/** merge=union',
+  '.squad/tasks/** merge=union',
 ];
 
 const GITIGNORE_ENTRIES = [
   '.squad/orchestration-log/',
   '.squad/log/',
+  '.squad/tasks/',
   '.squad/decisions/inbox/',
   '.squad/sessions/',
   '.squad/.cache/',
@@ -463,6 +465,7 @@ const ENSURE_DIRECTORIES = [
   '.squad/identity',
   '.squad/orchestration-log',
   '.squad/log',
+  '.squad/tasks',
   '.squad/sessions',
   '.squad/decisions/inbox',
   '.squad/casting',

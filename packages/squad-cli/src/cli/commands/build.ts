@@ -7,7 +7,7 @@
  *   - .squad/agents/{name}/charter.md
  *   - .squad/ceremonies.md
  *
- * NEVER touches: decisions.md, history.md, orchestration-log/
+ * NEVER touches: decisions.md, history.md, orchestration-log/, tasks/
  *
  * Flags:
  *   --check    validate without writing (exit 0 if matches disk, exit 1 if drift)
@@ -47,6 +47,7 @@ const PROTECTED_FILES = new Set([
 /** Directory prefixes we must NEVER touch. */
 const PROTECTED_DIRS = new Set([
   'orchestration-log',
+  'tasks',
 ]);
 
 // ---------------------------------------------------------------------------

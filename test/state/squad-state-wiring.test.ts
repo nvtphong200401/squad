@@ -95,6 +95,7 @@ describe('SquadState.fromStorage', () => {
     const state = SquadState.fromStorage(sp, ROOT);
     expect(state.root).toBe(ROOT);
     expect(state.provider).toBe(sp);
+    expect(state.tasks).toBeDefined();
   });
 });
 

@@ -16,6 +16,7 @@ import {
   LogCollection,
   RoutingCollection,
   SkillsCollection,
+  TasksCollection,
   TeamCollection,
   TemplatesCollection,
 } from './collections.js';
@@ -30,6 +31,7 @@ export class SquadState {
   readonly skills: SkillsCollection;
   readonly templates: TemplatesCollection;
   readonly log: LogCollection;
+  readonly tasks: TasksCollection;
 
   private constructor(
     private readonly storage: StorageProvider,
@@ -43,6 +45,7 @@ export class SquadState {
     this.skills = new SkillsCollection(storage, _rootDir);
     this.templates = new TemplatesCollection(storage, _rootDir);
     this.log = new LogCollection(storage, _rootDir);
+    this.tasks = new TasksCollection(storage, _rootDir);
   }
 
   /** The project root directory this SquadState is bound to. */

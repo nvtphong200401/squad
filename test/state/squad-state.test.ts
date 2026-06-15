@@ -583,6 +583,146 @@ describe('SquadState', () => {
     });
   });
 
+  // ── TasksCollection ───────────────────────────────────────────────────
+
+  describe('tasks', () => {
+    describe('list()', () => {
+      it('returns empty when .squad/tasks is missing', async () => {
+        expect(await state.tasks.list()).toEqual([]);
+      });
+    });
+
+    describe('get()', () => {
+      it('returns undefined for unknown task', async () => {
+        expect(await state.tasks.get('issue-404')).toBeUndefined();
+      });
+    });
+
+    describe('create() + appendEvent() + projection', () => {
+      it('supports append/read round-trip with attempt projection', async () => {
+        await state.tasks.create({
+          id: 'issue-123',
+          source: 'issue',
+          sourceRef: '#123',
+          title: 'Implement ledger foundation',
+          assignedAgent: 'ralph',
+          createdAt: '2026-07-25T00:00:00.000Z',
+          links: { orchestrationLog: '.squad/orchestration-log.md' },
+        });
+
+        await state.tasks.appendEvent('issue-123', {
+          id: 'selected-1',
+          type: 'selected',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:01.000Z',
+        });
+        await state.tasks.appendEvent('issue-123', {
+          id: 'started-1',
+          type: 'started',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:02.000Z',
+        });
+        await state.tasks.appendEvent('issue-123', {
+          id: 'failed-1',
+          type: 'failed',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:03.000Z',
+        });
+        await state.tasks.appendEvent('issue-123', {
+          id: 'selected-2',
+          type: 'selected',
+          attemptId: 'attempt-2',
+          timestamp: '2026-07-25T00:00:04.000Z',
+        });
+        await state.tasks.appendEvent('issue-123', {
+          id: 'started-2',
+          type: 'started',
+          attemptId: 'attempt-2',
+          timestamp: '2026-07-25T00:00:05.000Z',
+        });
+        await state.tasks.appendEvent('issue-123', {
+          id: 'completed-2',
+          type: 'completed',
+          attemptId: 'attempt-2',
+          timestamp: '2026-07-25T00:00:06.000Z',
+          summary: 'done',
+        });
+
+        const projected = await state.tasks.getProjected('issue-123');
+        expect(projected?.status).toBe('succeeded');
+        expect(projected?.latestAttemptId).toBe('attempt-2');
+        expect(projected?.attemptCount).toBe(2);
+      });
+
+      it('rejects duplicate event ids for the same task', async () => {
+        await state.tasks.create({
+          id: 'issue-dup',
+          source: 'issue',
+          sourceRef: '#10',
+          title: 'dup',
+          assignedAgent: 'ralph',
+        });
+        await state.tasks.appendEvent('issue-dup', {
+          id: 'selected',
+          type: 'selected',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:01.000Z',
+        });
+        await expect(state.tasks.appendEvent('issue-dup', {
+          id: 'selected',
+          type: 'selected',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:02.000Z',
+        })).rejects.toThrow(/Duplicate task event id/);
+      });
+
+      it('rejects invalid task ids', async () => {
+        await expect(state.tasks.create({
+          id: '../bad',
+          source: 'issue',
+          sourceRef: '#1',
+          title: 'bad',
+          assignedAgent: 'ralph',
+        })).rejects.toThrow(/Invalid task id/);
+      });
+
+      it('rejects invalid status transitions', async () => {
+        await state.tasks.create({
+          id: 'issue-transition',
+          source: 'issue',
+          sourceRef: '#11',
+          title: 'transition',
+          assignedAgent: 'ralph',
+        });
+        await expect(state.tasks.appendEvent('issue-transition', {
+          id: 'completed-first',
+          type: 'completed',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:01.000Z',
+        })).rejects.toThrow(/Invalid task status transition/);
+      });
+
+      it('skips malformed event files while keeping projection readable', async () => {
+        await state.tasks.create({
+          id: 'issue-corrupt',
+          source: 'issue',
+          sourceRef: '#12',
+          title: 'corrupt',
+          assignedAgent: 'ralph',
+        });
+        storage.writeSync(`${ROOT}/.squad/tasks/issue-corrupt/events/2026-07-25-bad.json`, '{bad json');
+        await state.tasks.appendEvent('issue-corrupt', {
+          id: 'selected-good',
+          type: 'selected',
+          attemptId: 'attempt-1',
+          timestamp: '2026-07-25T00:00:01.000Z',
+        });
+        const projected = await state.tasks.get('issue-corrupt');
+        expect(projected?.status).toBe('selected');
+      });
+    });
+  });
+
   // ── ConfigCollection ──────────────────────────────────────────────────
 
   describe('config', () => {

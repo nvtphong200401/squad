@@ -13,6 +13,9 @@ import type {
   Decision,
   RoutingConfig,
   RoutingConfigRule,
+  TaskEvent,
+  TaskRecord,
+  TaskStatus,
   TeamConfig,
   TeamMember,
 } from './domain-types.js';
@@ -23,6 +26,15 @@ import { createAgentHandle } from './handles.js';
 import { parseDecisions, serializeDecision, serializeDecisions } from './io/decisions-io.js';
 import { parseRouting, serializeRouting, type ParsedRouting } from './io/routing-io.js';
 import { parseTeam, serializeTeam, type ParsedTeam } from './io/team-io.js';
+import {
+  parseTaskEvent,
+  parseTaskMeta,
+  projectTaskRecord,
+  serializeTaskEvent,
+  serializeTaskMeta,
+  type ParsedTaskEvent,
+  type ParsedTaskMeta,
+} from './io/tasks-io.js';
 import { parseSkillFile } from '../skills/skill-loader.js';
 import type { ParsedDecision } from './io/decisions-io.js';
 import type { ParsedRoutingRule } from './io/routing-io.js';
@@ -291,6 +303,202 @@ export class TemplatesCollection {
   async exists(id: string): Promise<boolean> {
     const filePath = `${this.rootDir}/${resolveCollectionPath('templates', id)}`;
     return this.storage.exists(filePath);
+  }
+}
+
+// ── TasksCollection ────────────────────────────────────────────────────────
+
+const TASK_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function validateTaskId(taskId: string): void {
+  if (!TASK_ID_RE.test(taskId)) {
+    throw new Error(`Invalid task id "${taskId}"`);
+  }
+}
+
+function statusForEventType(type: TaskEvent['type']): TaskStatus {
+  switch (type) {
+    case 'selected':
+      return 'selected';
+    case 'started':
+    case 'heartbeat':
+      return 'running';
+    case 'completed':
+      return 'succeeded';
+    case 'failed':
+      return 'failed';
+    case 'blocked':
+      return 'blocked';
+    case 'cancelled':
+      return 'cancelled';
+  }
+}
+
+function isValidTransition(current: TaskStatus | undefined, next: TaskStatus): boolean {
+  if (!current) return next === 'selected';
+  if (current === 'selected') return next === 'selected' || next === 'running' || next === 'blocked' || next === 'cancelled';
+  if (current === 'running') return next === 'running' || next === 'succeeded' || next === 'failed' || next === 'blocked' || next === 'cancelled';
+  return next === 'selected' || next === 'running';
+}
+
+export interface CreateTaskInput {
+  id: string;
+  source: TaskRecord['source'];
+  sourceRef: string;
+  title: string;
+  assignedAgent: string;
+  createdAt?: string;
+  links?: TaskRecord['links'];
+  dependencies?: readonly string[];
+}
+
+export class TasksCollection {
+  constructor(
+    private readonly storage: StorageProvider,
+    private readonly rootDir: string,
+  ) {}
+
+  private baseDir(): string {
+    return `${this.rootDir}/.squad/tasks`;
+  }
+
+  private taskDir(taskId: string): string {
+    return `${this.rootDir}/${resolveCollectionPath('tasks', taskId)}`;
+  }
+
+  private metaPath(taskId: string): string {
+    return `${this.taskDir(taskId)}/meta.json`;
+  }
+
+  private eventsDir(taskId: string): string {
+    return `${this.taskDir(taskId)}/events`;
+  }
+
+  private async readMeta(taskId: string): Promise<ParsedTaskMeta | undefined> {
+    const content = await this.storage.read(this.metaPath(taskId));
+    if (content === undefined) return undefined;
+    try {
+      return parseTaskMeta(content);
+    } catch (err) {
+      throw new ParseError('tasks', `invalid meta for ${taskId}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+    }
+  }
+
+  private async readEvents(taskId: string): Promise<ParsedTaskEvent[]> {
+    const eventsDir = this.eventsDir(taskId);
+    if (!(await this.storage.exists(eventsDir))) return [];
+    const files = (await this.storage.list(eventsDir))
+      .filter((name) => name.endsWith('.json'))
+      .filter((name) => !name.endsWith('.tmp') && !name.startsWith('.'))
+      .sort();
+    const events: ParsedTaskEvent[] = [];
+    for (const file of files) {
+      const content = await this.storage.read(`${eventsDir}/${file}`);
+      if (content === undefined) continue;
+      try {
+        events.push(parseTaskEvent(content));
+      } catch {
+        // Skip malformed events to keep task projection resilient.
+      }
+    }
+    return events;
+  }
+
+  async create(input: CreateTaskInput): Promise<void> {
+    validateTaskId(input.id);
+    const createdAt = input.createdAt ?? new Date().toISOString();
+    const meta: ParsedTaskMeta = {
+      id: input.id,
+      schemaVersion: 1,
+      source: input.source,
+      sourceRef: input.sourceRef,
+      title: input.title,
+      assignedAgent: input.assignedAgent,
+      createdAt,
+      links: input.links,
+      dependencies: input.dependencies,
+    };
+    await this.storage.write(this.metaPath(input.id), serializeTaskMeta(meta));
+    await this.storage.mkdir(this.eventsDir(input.id), { recursive: true });
+  }
+
+  async get(taskId: string): Promise<TaskRecord | undefined> {
+    validateTaskId(taskId);
+    const meta = await this.readMeta(taskId);
+    if (!meta) return undefined;
+    const events = await this.readEvents(taskId);
+    return projectTaskRecord(meta, events);
+  }
+
+  async getProjected(taskId: string): Promise<TaskRecord | undefined> {
+    return this.get(taskId);
+  }
+
+  async list(): Promise<TaskRecord[]> {
+    const tasksDir = this.baseDir();
+    if (!(await this.storage.exists(tasksDir))) return [];
+    const taskIds = await this.storage.list(tasksDir);
+    const results: TaskRecord[] = [];
+    for (const taskId of taskIds) {
+      if (!TASK_ID_RE.test(taskId)) continue;
+      try {
+        const record = await this.get(taskId);
+        if (record) results.push(record);
+      } catch {
+        // Skip malformed task entries to keep callers resilient.
+      }
+    }
+    return results.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async appendEvent(taskId: string, event: Omit<TaskEvent, 'schemaVersion'> & { schemaVersion?: number }): Promise<void> {
+    validateTaskId(taskId);
+    const normalizedEvent: ParsedTaskEvent = {
+      ...event,
+      schemaVersion: event.schemaVersion ?? 1,
+    };
+
+    if (!TASK_ID_RE.test(normalizedEvent.id)) {
+      throw new Error(`Invalid event id "${normalizedEvent.id}"`);
+    }
+    if (!TASK_ID_RE.test(normalizedEvent.attemptId)) {
+      throw new Error(`Invalid attempt id "${normalizedEvent.attemptId}"`);
+    }
+
+    let current = await this.get(taskId);
+    if (!current && normalizedEvent.type !== 'selected') {
+      throw new Error(`Task "${taskId}" must be selected before "${normalizedEvent.type}"`);
+    }
+
+    if (!current && normalizedEvent.type === 'selected') {
+      await this.create({
+        id: taskId,
+        source: 'external',
+        sourceRef: taskId,
+        title: taskId,
+        assignedAgent: normalizedEvent.assignedAgent ?? 'ralph',
+        createdAt: normalizedEvent.timestamp,
+        links: normalizedEvent.links,
+      });
+      current = await this.get(taskId);
+    }
+
+    const nextStatus = statusForEventType(normalizedEvent.type);
+    if (!isValidTransition(current?.status, nextStatus)) {
+      throw new Error(`Invalid task status transition: ${current?.status ?? 'none'} -> ${nextStatus}`);
+    }
+
+    const eventsDir = this.eventsDir(taskId);
+    await this.storage.mkdir(eventsDir, { recursive: true });
+    const existingFiles = await this.storage.list(eventsDir);
+    const duplicate = existingFiles.some((name) => name.endsWith(`-${normalizedEvent.id}.json`));
+    if (duplicate) {
+      throw new Error(`Duplicate task event id "${normalizedEvent.id}" for ${taskId}`);
+    }
+
+    const safeTs = normalizedEvent.timestamp.replaceAll(':', '-').replaceAll('.', '-');
+    const eventPath = `${eventsDir}/${safeTs}-${normalizedEvent.id}.json`;
+    await this.storage.write(eventPath, serializeTaskEvent(normalizedEvent));
   }
 }
 

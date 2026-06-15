@@ -14,6 +14,7 @@ import type {
   LogEntry,
   RoutingConfig,
   SquadStateConfig,
+  TaskRecord,
   TeamConfig,
   Template,
 } from './domain-types.js';
@@ -29,6 +30,7 @@ export interface CollectionEntityMap {
   templates: Template;
   log: LogEntry;
   config: SquadStateConfig;
+  tasks: TaskRecord;
 }
 
 /** Union of all valid collection names. */

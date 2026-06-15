@@ -5,6 +5,7 @@
 import { execFile, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { SquadState } from '@bradygaster/squad-sdk';
 import type { WatchCapability, WatchContext, PreflightResult, CapabilityResult } from '../types.js';
 import type { MachineCapabilities } from '@bradygaster/squad-sdk/ralph/capabilities';
 import { createVerboseLogger } from '../verbose.js';
@@ -18,6 +19,80 @@ export interface ExecutableWorkItem {
   body?: string;
   labels: Array<{ name: string }>;
   assignees: Array<{ login: string }>;
+}
+
+interface LedgerRuntime {
+  state: {
+    tasks: {
+      get(taskId: string): Promise<{ id: string } | undefined>;
+      create(input: {
+        id: string;
+        source: 'issue' | 'manual' | 'pr' | 'external';
+        sourceRef: string;
+        title: string;
+        assignedAgent: string;
+        createdAt?: string;
+        links?: { orchestrationLog?: string; sessionLog?: string };
+      }): Promise<void>;
+      appendEvent(taskId: string, event: {
+        id: string;
+        type: 'selected' | 'started' | 'completed' | 'failed' | 'blocked';
+        attemptId: string;
+        timestamp: string;
+        assignedAgent?: string;
+        summary?: string;
+        links?: { orchestrationLog?: string; sessionLog?: string };
+      }): Promise<void>;
+    };
+  };
+  timestamp: string;
+}
+
+function toTaskId(issueNumber: number): string {
+  return `issue-${issueNumber}`;
+}
+
+async function initLedgerTask(runtime: LedgerRuntime, issue: ExecutableWorkItem): Promise<void> {
+  const taskId = toTaskId(issue.number);
+  const existing = await runtime.state.tasks.get(taskId);
+  if (!existing) {
+    await runtime.state.tasks.create({
+      id: taskId,
+      source: 'issue',
+      sourceRef: `#${issue.number}`,
+      title: issue.title,
+      assignedAgent: 'ralph',
+      createdAt: runtime.timestamp,
+      links: {
+        orchestrationLog: '.squad/orchestration-log.md',
+        sessionLog: '.squad/sessions/',
+      },
+    });
+  }
+}
+
+async function writeLedgerEvent(
+  runtime: LedgerRuntime,
+  issue: ExecutableWorkItem,
+  event: {
+    id: string;
+    type: 'selected' | 'started' | 'completed' | 'failed' | 'blocked';
+    attemptId: string;
+    summary?: string;
+  },
+): Promise<void> {
+  await runtime.state.tasks.appendEvent(toTaskId(issue.number), {
+    id: event.id,
+    type: event.type,
+    attemptId: event.attemptId,
+    timestamp: runtime.timestamp,
+    assignedAgent: 'ralph',
+    summary: event.summary,
+    links: {
+      orchestrationLog: '.squad/orchestration-log.md',
+      sessionLog: '.squad/sessions/',
+    },
+  });
 }
 
 /** Check whether an issue carries a squad or squad:* label. */
@@ -211,6 +286,11 @@ export class ExecuteCapability implements WatchCapability {
 
   async execute(context: WatchContext): Promise<CapabilityResult> {
     const vlog = createVerboseLogger(context.verbose ?? false);
+    const timestamp = new Date().toISOString();
+    const attemptId = `attempt-${timestamp.replaceAll(':', '-').replaceAll('.', '-')}`;
+    const ledgerRuntime: LedgerRuntime | undefined = context.stateContext
+      ? { state: SquadState.fromStorage(context.stateContext.storage, context.teamRoot) as unknown as LedgerRuntime['state'], timestamp }
+      : undefined;
 
     try {
       const timeout = ((context.config['timeout'] as number) ?? 30) * 60_000;
@@ -239,8 +319,50 @@ export class ExecuteCapability implements WatchCapability {
         return { success: true, summary: 'no squad-labeled issues found' };
       }
 
+      if (ledgerRuntime) {
+        for (const issue of eligible) {
+          try {
+            await initLedgerTask(ledgerRuntime, issue);
+            await writeLedgerEvent(ledgerRuntime, issue, {
+              id: `selected-${attemptId}`,
+              type: 'selected',
+              attemptId,
+              summary: `Watch selected issue #${issue.number} for execution`,
+            });
+            await writeLedgerEvent(ledgerRuntime, issue, {
+              id: `started-${attemptId}`,
+              type: 'started',
+              attemptId,
+              summary: 'Watch started Ralph execution for selected issue',
+            });
+          } catch (err) {
+            vlog.log(`Task ledger write skipped for #${issue.number}: ${(err as Error).message}`);
+          }
+        }
+      }
+
       // Single agent invocation with all issues — agent reads ralph-instructions.md
       const result = await executeAll(eligible, context, timeout);
+
+      if (ledgerRuntime) {
+        const terminalType = result.success
+          ? 'completed'
+          : (result.error?.toLowerCase().includes('timed out') ? 'blocked' : 'failed');
+        for (const issue of eligible) {
+          try {
+            await writeLedgerEvent(ledgerRuntime, issue, {
+              id: `${terminalType}-${attemptId}`,
+              type: terminalType,
+              attemptId,
+              summary: result.success
+                ? `Watch execution completed for issue #${issue.number}`
+                : `Watch execution ended: ${result.error ?? 'unknown error'}`,
+            });
+          } catch (err) {
+            vlog.log(`Task ledger terminal write skipped for #${issue.number}: ${(err as Error).message}`);
+          }
+        }
+      }
 
       return {
         success: result.success,

@@ -26,3 +26,7 @@ export type { ParsedRoutingRule, ParsedRouting } from './routing-io.js';
 // Team I/O
 export { parseTeam, serializeTeam } from './team-io.js';
 export type { ParsedAgent, TeamMetadata, ParsedTeam } from './team-io.js';
+
+// Tasks I/O
+export { parseTaskMeta, serializeTaskMeta, parseTaskEvent, serializeTaskEvent, projectTaskRecord } from './tasks-io.js';
+export type { ParsedTaskMeta, ParsedTaskEvent } from './tasks-io.js';

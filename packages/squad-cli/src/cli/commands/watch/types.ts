@@ -6,6 +6,7 @@
  */
 
 import type { PlatformAdapter } from '@bradygaster/squad-sdk/platform';
+import type { SquadStateContext } from '@bradygaster/squad-sdk';
 
 /** Phase within a single watch round. */
 export type WatchPhase = 'pre-scan' | 'post-triage' | 'post-execute' | 'housekeeping';
@@ -41,6 +42,8 @@ export interface WatchContext {
   verbose?: boolean;
   /** PID tracker for child process cleanup (optional — only set when watch is running). */
   pidTracker?: { track(pid: number, name: string): void; untrack(pid: number): void };
+  /** Pre-resolved state context for backend-aware mutable state I/O. */
+  stateContext?: SquadStateContext | null;
 }
 
 /** Contract that every watch capability must implement. */
